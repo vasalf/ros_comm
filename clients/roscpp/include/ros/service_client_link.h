@@ -58,7 +58,7 @@ public:
   //
   bool initialize(const ConnectionPtr& connection);
   bool handleHeader(const Header& header);
-
+  
   /**
    * \brief Writes a response to the current request.
    * \param ok Whether the callback was successful or not

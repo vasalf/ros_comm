@@ -38,6 +38,7 @@
 #include "ros/master.h"
 #include "ros/transport/transport_tcp.h"
 #include "ros/transport/transport_udp.h"
+#include "ros/transport/transport_intraprocess.h"
 #include "ros/init.h"
 #include "ros/connection.h"
 #include "ros/file_log.h"
@@ -252,16 +253,41 @@ ServiceServerLinkPtr ServiceManager::createServiceServerLink(const std::string& 
     return ServiceServerLinkPtr();
   }
 
-  TransportTCPPtr transport(boost::make_shared<TransportTCP>(&poll_manager_->getPollSet()));
+  if (!isServiceAdvertised(service)) {
+    TransportTCPPtr transport(boost::make_shared<TransportTCP>(&poll_manager_->getPollSet()));
 
-  // Make sure to initialize the connection *before* transport->connect()
-  // is called, otherwise we might miss a connect error (see #434).
-  ConnectionPtr connection(boost::make_shared<Connection>());
-  connection_manager_->addConnection(connection);
-  connection->initialize(transport, false, HeaderReceivedFunc());
+    // Make sure to initialize the connection *before* transport->connect()
+    // is called, otherwise we might miss a connect error (see #434).
+    ConnectionPtr connection(boost::make_shared<Connection>());
+    connection_manager_->addConnection(connection);
+    connection->initialize(transport, false, HeaderReceivedFunc());
 
-  if (transport->connect(serv_host, serv_port))
-  {
+    if (transport->connect(serv_host, serv_port))
+    {
+      ServiceServerLinkPtr client(boost::make_shared<ServiceServerLink>(service, persistent, request_md5sum, response_md5sum, header_values));
+
+      {
+        boost::mutex::scoped_lock lock(service_server_links_mutex_);
+        service_server_links_.push_back(client);
+      }
+
+      client->initialize(connection);
+
+      return client;
+    }
+  } else {
+    // Then it is a local connection so the transport will be intra-process
+
+    TransportIntraProcessPtr out_transport(boost::make_shared<TransportIntraProcess>());
+    TransportIntraProcessPtr in_transport(boost::make_shared<TransportIntraProcess>());
+    out_transport->setInterlocutor(in_transport);
+    in_transport->setInterlocutor(out_transport);
+    ConnectionPtr in_connection(boost::make_shared<Connection>());
+    connection_manager_->addConnection(in_connection);
+    ConnectionPtr out_connection(boost::make_shared<Connection>());
+    connection_manager_->addConnection(out_connection);
+    out_connection->initialize(out_transport, false, HeaderReceivedFunc());
+
     ServiceServerLinkPtr client(boost::make_shared<ServiceServerLink>(service, persistent, request_md5sum, response_md5sum, header_values));
 
     {
@@ -269,8 +295,9 @@ ServiceServerLinkPtr ServiceManager::createServiceServerLink(const std::string& 
       service_server_links_.push_back(client);
     }
 
-    client->initialize(connection);
-
+    client->initialize(out_connection);
+    in_connection->initialize(in_transport, true, boost::bind(&ConnectionManager::onConnectionHeaderReceived, connection_manager_.get(), _1, _2));
+    
     return client;
   }
 

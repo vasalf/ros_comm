@@ -36,10 +36,13 @@
 #include "ros/service_client_link.h"
 #include "ros/connection.h"
 #include "ros/callback_queue_interface.h"
+#include "ros/transport/transport.h"
 
 #include <boost/bind.hpp>
 
 #include <std_msgs/String.h>
+
+#include <cstring>
 
 namespace ros
 {
@@ -158,7 +161,12 @@ private:
 void ServicePublication::processRequest(boost::shared_array<uint8_t> buf, size_t num_bytes, const ServiceClientLinkPtr& link)
 {
   CallbackInterfacePtr cb(boost::make_shared<ServiceCallback>(helper_, buf, num_bytes, link, has_tracked_object_, tracked_object_));
-  callback_queue_->addCallback(cb, (uint64_t)this);
+  if (std::strcmp(link->getConnection()->getTransport()->getType(), "intra-process") == 0) {
+      // Intra-process requests should be answered immediately
+      cb->call();
+  } else {
+      callback_queue_->addCallback(cb, (uint64_t)this);
+  }
 }
 
 void ServicePublication::addServiceClientLink(const ServiceClientLinkPtr& link)

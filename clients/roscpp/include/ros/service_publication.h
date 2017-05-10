@@ -79,7 +79,7 @@ public:
    * \brief Removes a service link from our list
    */
   void removeServiceClientLink(const ServiceClientLinkPtr& link);
-
+  
   /**
    * \brief Terminate this service server
    */

@@ -417,6 +417,7 @@ void Connection::onHeaderRead(const ConnectionPtr& conn, const boost::shared_arr
   }
   else
   {
+    M_stringPtr recv = header_.getValues();
     std::string error_val;
     if (header_.getValue("error", error_val))
     {

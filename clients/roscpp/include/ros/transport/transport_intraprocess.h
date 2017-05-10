@@ -7,6 +7,7 @@
 #include "ros/transport/transport.h"
 
 #include <boost/thread/mutex.hpp>
+#include <boost/thread/condition_variable.hpp>
 #include <deque>
 
 namespace ros
@@ -23,11 +24,11 @@ public:
 
   void setInterlocutor(TransportIntraProcessPtr& interlocutor);
 
-  void accept(uint8_t* buffer, uint32_t size);
+  uint32_t accept(uint8_t* buffer, uint32_t size);
   
   // overrides from Transport
-  virtual uint32_t read(uint8_t* buffer, uint32_t size);
-  virtual uint32_t write(uint8_t* buffer, uint32_t size);
+  virtual int32_t read(uint8_t* buffer, uint32_t size);
+  virtual int32_t write(uint8_t* buffer, uint32_t size);
 
   virtual void enableWrite();
   virtual void disableWrite();
@@ -38,19 +39,19 @@ public:
 
   virtual std::string getTransportInfo();
 
-  virtual const char* getType() { return "intraprocess"; }
+  virtual const char* getType() { return "intra-process"; }
   
 private:
 
   boost::mutex configuration_mutex_;
-  TransportIntraProcess interlocutor_;
+  TransportIntraProcessPtr interlocutor_;
   bool write_enabled_;
   bool read_enabled_;
 
   boost::mutex buffer_mutex_;
   std::deque<uint8_t> buffer_;
 };
-
+ 
 }
 
 #endif //ROSCPP_TRANSPORT_INTRAPROCESS_H

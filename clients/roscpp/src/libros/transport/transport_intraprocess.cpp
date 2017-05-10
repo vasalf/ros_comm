@@ -28,79 +28,92 @@ void TransportIntraProcess::setInterlocutor(TransportIntraProcessPtr& interlocut
 
 uint32_t TransportIntraProcess::accept(uint8_t* buffer, uint32_t size)
 {
-  boost::mutex::scoped_lock conf_lock(configuration_mutex_);
-  boost::mutex::scoped_lock buf_lock(buffer_mutex_);
-  if (!read_enabled_)
-    return 0;
-  std::copy(buffer, buffer + size, std::back_inserter(buffer_));
+  bool read_enabled;
+  {
+    boost::mutex::scoped_lock conf_lock(configuration_mutex_);
+    boost::mutex::scoped_lock buf_lock(buffer_mutex_);
+    read_enabled = read_enabled_;
+    std::copy(buffer, buffer + size, std::back_inserter(buffer_));
+  }
+  if (read_enabled && read_cb_)
+      read_cb_(shared_from_this());
   return size;
 }
 
-uint32_t read(uint8_t* buffer, uint32_t size)
+int32_t TransportIntraProcess::read(uint8_t* buffer, uint32_t size)
 {
-  boost::mutex::scoped_lock conf_lock(configuration_mutex_);
-  if (!read_enabled_)
-    return 0;
-  
+  {
+    boost::mutex::scoped_lock conf_lock(configuration_mutex_);
+    if (!read_enabled_) {
+      return 0;
+    }
+  }
+
   boost::mutex::scoped_lock buf_lock(buffer_mutex_);
   size = std::min(size, (uint32_t)buffer_.size());
-  std::deque<uint8_t> end = buffer_.begin() + size;
-  for (std::deque<uint8_t>::iterator it = buffer_.beginI(); it != end; it++)
-    *(buffer++) = *it;
-  return size;
+  int32_t ret = size;
+  while (size > 0) {
+    *(buffer++) = buffer_.front();
+    buffer_.pop_front();
+    size--;
+  }
+  return ret;
 }
 
-uint32_t write(uint8_t* buffer, uint32_t size)
+int32_t TransportIntraProcess::write(uint8_t* buffer, uint32_t size)
 {
-  boost::mutex::scoped_lock conf_lock(configuration_mutex_);
-  if (!write_enabled_)
-    return 0;
+  {
+    boost::mutex::scoped_lock conf_lock(configuration_mutex_);
+    if (!write_enabled_)
+      return 0;
+  }
 
   // interlocutor should not be NULL if write is enabled
-  ROS_ASSERT(interlocutor != NULL);
-  return interlocutor->accept(buffer, size);
+  ROS_ASSERT(interlocutor_ != NULL);
+  uint32_t ret = interlocutor_->accept(buffer, size);
+  return ret;
 }
 
-void enableWrite()
+void TransportIntraProcess::enableWrite()
 {
   {
     boost::mutex::scoped_lock conf_lock(configuration_mutex_);
     write_enabled_ = true;
   }
   if (write_cb_)
-    write_cb_();
+    write_cb_(shared_from_this());
 }
 
-void disableWrite()
+void TransportIntraProcess::disableWrite()
 {
   boost::mutex::scoped_lock conf_lock(configuration_mutex_);
   write_enabled_ = false;
 }
 
-void enableRead()
+void TransportIntraProcess::enableRead()
 {
   {
     boost::mutex::scoped_lock conf_lock(configuration_mutex_);
     read_enabled_ = true;
   }
   if (read_cb_)
-    read_cb_();
+    read_cb_(shared_from_this());
 }
 
-void disableRead()
+void TransportIntraProcess::disableRead()
 {
   boost::mutex::scoped_lock conf_lock(configuration_mutex_);
   read_enabled_ = false;
 }
 
-void close()
+void TransportIntraProcess::close()
 {
   boost::mutex::scoped_lock conf_lock(configuration_mutex_);
   read_enabled_ = false;
   write_enabled_ = false;
 }
-
-std::string getTransportInfo()
+    
+std::string TransportIntraProcess::getTransportInfo()
 {
   boost::mutex::scoped_lock(configuration_mutex_);
   std::stringstream str;
@@ -108,4 +121,4 @@ std::string getTransportInfo()
   return str.str();
 }
 
-
+}
