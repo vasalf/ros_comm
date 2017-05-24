@@ -79,7 +79,10 @@ private:
   // thread may still be using them (or more likely their transport)
   void removeDroppedConnections();
 
+public: /* We need this function to bind for the intra-process transport */
   bool onConnectionHeaderReceived(const ConnectionPtr& conn, const Header& header);
+
+private:
   void tcprosAcceptConnection(const TransportTCPPtr& transport);
 
   PollManagerPtr poll_manager_;
